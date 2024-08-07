@@ -1,0 +1,83 @@
+---
+
+- name: 'Install the SCM Manager'
+  hosts: 'k3s1'
+  gather_facts: true
+  become: false
+  module_defaults:
+    kubernetes.core.helm:
+      kubeconfig: './k3s-kubeconfig'
+    kubernetes.core.k8s:
+      kubeconfig: './k3s-kubeconfig'
+    kubernetes.core.k8s_info:
+      kubeconfig: './k3s-kubeconfig'
+
+  tasks:
+
+    - name: 'Create the scm-manager namespace'
+      delegate_to: 'localhost'
+      kubernetes.core.k8s:
+        name: 'scm-manager'
+        api_version: 'v1'
+        kind: 'Namespace'
+        state: 'present'
+
+    - name: 'Install the SCM Manager via the helm chart'
+      delegate_to: 'localhost'
+      kubernetes.core.helm:
+        chart_repo_url: https://packages.scm-manager.org/repository/helm-v2-releases/
+        chart_ref: scm-manager
+        release_name: scm-manager
+        release_namespace: scm-manager
+        release_values:
+          ingress:
+            enabled: true
+            hosts:
+              - "scm-manager.{{ hostvars['k3s1']['ansible_default_ipv4']['address'] }}.sslip.io"
+            path: '/'
+
+    - name: 'Wait until all pods in the scm-manager namespace are running'
+      delegate_to: localhost
+      become: false
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: scm-manager
+      register: pod_list
+      until:
+        '
+        pod_list | json_query("resources[*].status.phase") | unique | sort == ["Running"]
+        or
+        pod_list | json_query("resources[*].status.phase") | unique | sort == ["Running", "Succeeded"]
+        '
+      retries: 12
+      delay: 10
+
+    - name: 'Wait until all pods in the scm-manager namespace are ready'
+      delegate_to: localhost
+      become: false
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Pod
+        namespace: scm-manager
+      register: pod_list_ready
+      until:
+        '
+        pod_list_ready | json_query("resources[*].status.containerStatuses[*].ready") | unique | sort == [[true]]
+        '
+      retries: 12
+      delay: 10
+
+    - name: 'Wait for URL to be available'
+      delegate_to: 'localhost'
+      ansible.builtin.uri:
+        url: "http://scm-manager.{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}.sslip.io"
+      register: result
+      until: "result.status == 200"
+      retries: 31
+      delay: 10
+
+    - name: 'Output URL'
+      delegate_to: 'localhost'
+      ansible.builtin.debug:
+        msg: "The SCM Manager is reachable at scm-manager.{{ hostvars['k3s1']['ansible_default_ipv4']['address'] }}.sslip.io"
