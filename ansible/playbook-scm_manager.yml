@@ -11,6 +11,8 @@
       kubeconfig: './k3s-kubeconfig'
     kubernetes.core.k8s_info:
       kubeconfig: './k3s-kubeconfig'
+    kubernetes.core.k8s_log:
+      kubeconfig: './k3s-kubeconfig'
 
   tasks:
 
@@ -77,7 +79,21 @@
       retries: 31
       delay: 10
 
+    - name: 'Get token from scm-manager pod logs'
+      delegate_to: localhost
+      become: false
+      kubernetes.core.k8s_log:
+        namespace: scm-manager
+        label_selectors:
+          - app=scm-manager
+      register: scm_manager_pod_logs
+
     - name: 'Output URL'
       delegate_to: 'localhost'
       ansible.builtin.debug:
-        msg: "The SCM Manager is reachable at scm-manager.{{ hostvars['k3s1']['ansible_default_ipv4']['address'] }}.sslip.io"
+        msg: "The SCM Manager is reachable at http://scm-manager.{{ hostvars['k3s1']['ansible_default_ipv4']['address'] }}.sslip.io"
+
+    - name: 'Output Token'
+      delegate_to: 'localhost'
+      ansible.builtin.debug:
+        msg: "The token for the admin account creation is: {{ scm_manager_pod_logs.log_lines | regex_findall('.*sonia.scm.lifecycle.AdminAccountStartupAction.*==\\s+(\\S+)\\s+==', '\\1') | first }}"
