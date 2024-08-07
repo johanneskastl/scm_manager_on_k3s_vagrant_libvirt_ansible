@@ -17,6 +17,11 @@ Please be aware, that this might break the Ansible provisioning.
    `git submodule init && git submodule update`
 1. Run `vagrant up`
 1. Open the URL that Ansible printed out at the end of the provisioning.
+1. Create an administrative account using the token that is printed out at the
+   end of the Ansible provisioning.
+1. You get asked for the list of plugins you would like to enable. After this,
+   the server restarts and you get a login page.
+1. Log in using the account you just created.
 1. Party!
 
 ## Cleaning up
